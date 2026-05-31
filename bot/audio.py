@@ -141,6 +141,57 @@ class AudioPlayer:
         sd.play(data, samplerate=sr, device=self._device_idx)
         sd.wait()
 
+    def _load_wav(self, wav_bytes: bytes) -> tuple:
+        buf = io.BytesIO(wav_bytes)
+        data, sr = sf.read(buf, dtype="float32")
+
+        # Always output stereo (2 ch). Playing mono (1 ch) to a multi-channel
+        # virtual device (e.g. BlackHole 16ch) opens a 1-channel CoreAudio
+        # stream that Chrome/Meet doesn't reliably capture.
+        if data.ndim == 1:
+            data = np.column_stack([data, data])
+        elif data.shape[1] == 1:
+            data = np.column_stack([data[:, 0], data[:, 0]])
+
+        return data, sr
+
+    async def play_wav_interruptible(
+        self, wav_bytes: bytes, interrupt_event: asyncio.Event
+    ) -> bool:
+        """Play WAV audio, stopping early if interrupt_event fires.
+
+        Returns True if interrupted mid-playback, False if played to completion.
+        The caller is responsible for clearing interrupt_event before calling.
+        """
+        self._resolve_device()
+        async with self._lock:
+            data, sr = await asyncio.to_thread(self._load_wav, wav_bytes)
+
+            dev_name = sd.query_devices(self._device_idx)["name"] if self._device_idx is not None else "default"
+            print(f"[audio] Playing {data.shape[1]}ch @ {sr}Hz → '{dev_name}' ({len(data)/sr:.1f}s)")
+
+            # sd.play() is non-blocking — starts the stream and returns immediately
+            sd.play(data, samplerate=sr, device=self._device_idx)
+
+            play_done = asyncio.create_task(asyncio.to_thread(sd.wait))
+            interrupted = asyncio.create_task(interrupt_event.wait())
+
+            done, pending = await asyncio.wait(
+                {play_done, interrupted},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for t in pending:
+                t.cancel()
+                try:
+                    await t
+                except asyncio.CancelledError:
+                    pass
+
+            if interrupted in done:
+                sd.stop()
+                return True
+            return False
+
     async def play_pcm_f32(self, pcm_bytes: bytes, sample_rate: int) -> None:
         """Play raw float32 PCM audio bytes."""
         self._resolve_device()

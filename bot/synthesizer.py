@@ -15,9 +15,11 @@ class CartesiaSynthesizer:
 
     def __init__(self, api_key: str, voice_id: str, model_id: str = "sonic-2"):
         self.api_key = api_key
-        self.voice_id = "88d827a5-9abd-497e-9364-2f0019532a60"
+        self.voice_id = voice_id
         self.model_id = model_id
-        self.sample_rate = 22050
+        # 44100 Hz matches macOS devices' native rate (including BlackHole).
+        # 22050 Hz caused silent/distorted output due to PortAudio resampling.
+        self.sample_rate = 44100
 
     def _output_format(self, container: str = "wav") -> dict:
         return {

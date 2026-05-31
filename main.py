@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Voice AI Meeting Bot — entry point.
-
 Usage:
   python main.py --url "https://meet.google.com/xxx-xxxx-xxx"
-  python main.py --url "https://zoom.us/j/1234567890"
   python main.py --no-browser          # mic-only mode (no meeting join)
   python main.py --list-devices        # print available audio devices
   python main.py --list-voices         # print Cartesia voices
@@ -119,14 +117,24 @@ async def run(args: argparse.Namespace) -> None:
             bot_name=config.bot_name,
             mic_device=config.output_device,
             headless=args.headless,
+            user_data_dir=config.chrome_user_data_dir,
         )
         print(f"[main] Joining: {config.meeting_url}")
         await meeting_bot.launch()
 
+        # JS audio injection: bot voice goes directly into Chrome's mic stream.
+        # This bypasses BlackHole 16ch entirely — no virtual device needed.
+        pipeline.meeting_play = meeting_bot.play_audio
+        pipeline.meeting_stop = meeting_bot.stop_audio
+
+        # Still mute/unmute the Meet mic button so the bot is silent
+        # while listening and only transmits when it actually speaks.
+        pipeline.on_speak_start = meeting_bot.unmute_mic
+        pipeline.on_speak_end = meeting_bot.mute_mic
+
         # Give the meeting a moment to stabilise audio
         await asyncio.sleep(3)
 
-    # ── Run pipeline ──────────────────────────────────────────────────────────
     print("[main] Pipeline running. Press Ctrl+C to stop.\n")
     try:
         await pipeline.run()

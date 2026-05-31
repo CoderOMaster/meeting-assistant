@@ -19,12 +19,15 @@ class Config:
     # Meeting
     meeting_url: str = field(default_factory=lambda: os.getenv("MEETING_URL", ""))
     bot_name: str = field(default_factory=lambda: os.getenv("BOT_NAME", "AI Assistant"))
+    chrome_user_data_dir: str = field(
+        default_factory=lambda: os.path.expanduser(os.getenv("CHROME_USER_DATA_DIR", ""))
+    )
 
     # Audio devices
     input_device: str = field(default_factory=lambda: os.getenv("INPUT_DEVICE", "BlackHole 2ch"))
     output_device: str = field(default_factory=lambda: os.getenv("OUTPUT_DEVICE", "BlackHole 16ch"))
     sample_rate: int = 16000
-    tts_sample_rate: int = 22050
+    tts_sample_rate: int = 44100
 
     # Response behaviour
     response_mode: str = field(default_factory=lambda: os.getenv("RESPONSE_MODE", "question"))
